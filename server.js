@@ -3,7 +3,6 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 const Mailgun = require("mailgun.js");
 const formData = require("form-data");
-const axios = require("axios");
 require("dotenv").config();
 
 const app = express();
@@ -82,6 +81,10 @@ async function processWorkflowStep(step, workflowState) {
       subject: subject,
       html: message,
     };
+
+    if (!emailEventStates[to]) {
+      emailEventStates[to] = {};
+    }
 
     console.log();
     console.log("Sending email with details:", emailInfo);
