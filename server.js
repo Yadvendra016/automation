@@ -69,7 +69,9 @@ async function processNextWorkflowStep(workflowId) {
   console.log();
   console.log(`Moving to next step in workflow ID: ${workflowId}`);
 
-  processNextWorkflowStep(workflowId);
+  if (step.type !== "conditional") {
+    processNextWorkflowStep(workflowId);
+  }
 }
 
 async function processWorkflowStep(step, workflowState) {
