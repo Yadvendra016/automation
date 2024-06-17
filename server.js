@@ -149,39 +149,40 @@ async function processWorkflowStep(step, workflowState) {
     console.log();
     console.log("Break ended");
   } else if (step.type === "conditional") {
-    const { branches } = step;
+    const { condition, truePath, falsePath } = step;
+    let conditionResult = false;
 
     console.log();
-    console.log("Evaluating conditional branches");
+    console.log(`Evaluating condition: ${condition}`);
 
-    for (const branch of branches) {
-      const { condition, path } = branch;
-      let conditionResult = false;
-
+    try {
+      conditionResult = eval(condition);
       console.log();
-      console.log(`Evaluating condition: ${condition}`);
+      console.log(`Condition result: ${conditionResult}`);
+    } catch (error) {
+      console.error();
+      console.error(`Error evaluating condition: ${condition}`, error);
+      throw error;
+    }
 
-      try {
-        conditionResult = eval(condition);
-        console.log();
-        console.log(`Condition result: ${conditionResult}`);
-      } catch (error) {
-        console.error();
-        console.error(`Error evaluating condition: ${condition}`, error);
-        throw error;
-      }
+    if (conditionResult) {
+      console.log();
+      console.log("Condition is true, following truePath");
 
-      if (conditionResult) {
-        console.log();
-        console.log("Condition is true, following path");
+      workflowState.steps.splice(
+        workflowState.currentStepIndex + 1,
+        0,
+        ...truePath
+      );
+    } else {
+      console.log();
+      console.log("Condition is false, following falsePath");
 
-        workflowState.steps.splice(
-          workflowState.currentStepIndex + 1,
-          0,
-          ...path
-        );
-        break; // Stop checking other branches
-      }
+      workflowState.steps.splice(
+        workflowState.currentStepIndex + 1,
+        0,
+        ...falsePath
+      );
     }
   } else if (step.type === "messenger") {
     const { message } = step;
