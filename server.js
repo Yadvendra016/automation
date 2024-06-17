@@ -223,15 +223,15 @@ function sendEmail(emailInfo) {
 }
 
 app.post("/webhook/emailEvent", (req, res) => {
-  const eventData = req.body;
-  const { event, recipient } = eventData;
+  const recipient = req.body.recipient;
+  const event = req.body.event;
+
+  console.log();
+  console.log(`Received email event: ${event} for recipient: ${recipient}`);
 
   if (!emailEventStates[recipient]) {
     emailEventStates[recipient] = {};
   }
-
-  console.log();
-  console.log(`Received email event: ${event} for recipient: ${recipient}`);
 
   if (event === "clicked") {
     emailEventStates[recipient].clicked = true;
