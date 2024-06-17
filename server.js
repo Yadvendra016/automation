@@ -223,9 +223,7 @@ function sendEmail(emailInfo) {
 }
 
 app.post("/webhook/emailEvent", (req, res) => {
-  console.log("this is body:  ++  " + JSON.stringify(req.body));
-  const recipient = req.body.recipient;
-  const event = req.body.event;
+  const { event, recipient } = req.body.event_data;
 
   console.log();
   console.log(`Received email event: ${event} for recipient: ${recipient}`);
@@ -238,6 +236,8 @@ app.post("/webhook/emailEvent", (req, res) => {
     emailEventStates[recipient].clicked = true;
   } else if (event === "opened") {
     emailEventStates[recipient].opened = true;
+    console.log("");
+    console.log("email open ho gya");
     triggerWorkflowForEmailOpened(recipient);
   }
 
