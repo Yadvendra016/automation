@@ -253,6 +253,8 @@ function triggerWorkflowForEmailOpened(recipient) {
     const workflowState = workflowStates[workflowId];
     const step = workflowState.steps[workflowState.currentStepIndex];
     console.log("entererd in the triggerWorkflowEmail opened");
+    console.log("");
+    console.log(step);
     if (
       step &&
       step.type === "conditional" &&
