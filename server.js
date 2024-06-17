@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const Mailgun = require("mailgun.js");
+const axios = require("axios");
 const formData = require("form-data");
 require("dotenv").config();
 
@@ -17,8 +18,29 @@ const mg = mailgun.client({
   key: process.env.MAILGUN_API_KEY,
 });
 
+const MESSENGER_BACKEND_URL = "https://reachify.onrender.com";
+
 let emailEventStates = {};
 let workflowStates = {};
+
+async function sendMessengerMessage(message) {
+  try {
+    const usersResponse = await axios.get(`${MESSENGER_BACKEND_URL}/getUsers`);
+    const users = usersResponse.data;
+
+    for (const user of users) {
+      const payload = {
+        platform: "messenger",
+        recipientId: user.clientId,
+        messageText: message,
+      };
+      await axios.post(`${MESSENGER_BACKEND_URL}/send`, payload);
+    }
+  } catch (error) {
+    console.error("Error sending Messenger message:", error);
+    throw error;
+  }
+}
 
 app.post("/api/emailWorkflow", async (req, res) => {
   const { senderEmail, senderName, workflow } = req.body;
@@ -29,6 +51,7 @@ app.post("/api/emailWorkflow", async (req, res) => {
     senderName,
     steps: JSON.parse(workflow),
     currentStepIndex: 0,
+    stopped: false,
   };
 
   console.log();
@@ -48,6 +71,13 @@ app.post("/api/emailWorkflow", async (req, res) => {
 
 async function processNextWorkflowStep(workflowId) {
   const workflowState = workflowStates[workflowId];
+
+  if (workflowState.stopped) {
+    console.log();
+    console.log(`Workflow ID: ${workflowId} has been stopped`);
+    return;
+  }
+
   const step = workflowState.steps[workflowState.currentStepIndex];
 
   if (!step) {
@@ -64,14 +94,20 @@ async function processNextWorkflowStep(workflowId) {
 
   await processWorkflowStep(step, workflowState);
 
+  if (workflowState.stopped) {
+    console.log();
+    console.log(
+      `Workflow ID: ${workflowId} has been stopped after step processing`
+    );
+    return;
+  }
+
   workflowState.currentStepIndex += 1;
 
   console.log();
   console.log(`Moving to next step in workflow ID: ${workflowId}`);
 
-  if (step.type !== "conditional") {
-    processNextWorkflowStep(workflowId);
-  }
+  processNextWorkflowStep(workflowId);
 }
 
 async function processWorkflowStep(step, workflowState) {
@@ -146,17 +182,22 @@ async function processWorkflowStep(step, workflowState) {
         ...falsePath
       );
     }
+  } else if (step.type === "messenger") {
+    const { message } = step;
+    await sendMessengerMessage(message);
   } else if (step.type === "split") {
     const { paths } = step;
 
     console.log();
     console.log("Splitting workflow paths");
 
-    for (const path of paths) {
-      for (const pathStep of path) {
-        await processWorkflowStep(pathStep, workflowState);
-      }
-    }
+    await Promise.all(
+      paths.map(async (path) => {
+        for (const pathStep of path) {
+          await processWorkflowStep(pathStep, workflowState);
+        }
+      })
+    );
 
     console.log();
     console.log("Completed processing split paths");
@@ -166,7 +207,12 @@ async function processWorkflowStep(step, workflowState) {
     console.log();
     console.log(`Going to step index: ${targetIndex}`);
 
-    workflowState.currentStepIndex = targetIndex - 1; // subtract 1 because it will be incremented after this step
+    workflowState.currentStepIndex = targetIndex - 1;
+  } else if (step.type === "stop") {
+    console.log();
+    console.log("Stop step encountered, halting workflow");
+    workflowState.stopped = true; // Set stopped flag
+    return;
   }
 }
 
