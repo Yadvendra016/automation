@@ -118,6 +118,8 @@ async function processWorkflowStep(step, workflowState) {
       to: [to],
       subject: subject,
       html: message,
+      "o:tracking": true,
+      "o:tracking-opens": true,
     };
 
     if (!emailEventStates[to]) {
