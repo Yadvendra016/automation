@@ -92,7 +92,7 @@ async function processNextWorkflowStep(workflowId) {
   );
   console.log("Step details:", step);
 
-  await processWorkflowStep(step, workflowState, workflowId);
+  await processWorkflowStep(step, workflowState);
 
   if (workflowState.stopped) {
     console.log();
@@ -110,7 +110,7 @@ async function processNextWorkflowStep(workflowId) {
   processNextWorkflowStep(workflowId);
 }
 
-async function processWorkflowStep(step, workflowState, workflowId) {
+async function processWorkflowStep(step, workflowState) {
   if (step.type === "email") {
     const { to, subject, message } = step;
     const emailInfo = {
@@ -150,25 +150,40 @@ async function processWorkflowStep(step, workflowState, workflowId) {
     console.log("Break ended");
   } else if (step.type === "conditional") {
     const { condition, truePath, falsePath } = step;
+    let conditionResult = false;
 
     console.log();
     console.log(`Evaluating condition: ${condition}`);
 
-    if (!eval(condition)) {
+    try {
+      conditionResult = eval(condition);
+      console.log();
+      console.log(`Condition result: ${conditionResult}`);
+    } catch (error) {
+      console.error();
+      console.error(`Error evaluating condition: ${condition}`, error);
+      throw error;
+    }
+
+    if (conditionResult) {
+      console.log();
+      console.log("Condition is true, following truePath");
+
+      workflowState.steps.splice(
+        workflowState.currentStepIndex + 1,
+        0,
+        ...truePath
+      );
+    } else {
       console.log();
       console.log("Condition is false, following falsePath");
+
       workflowState.steps.splice(
         workflowState.currentStepIndex + 1,
         0,
         ...falsePath
       );
-      return;
     }
-
-    console.log();
-    console.log("Condition is true, awaiting event");
-    // Halting the workflow until the condition is met
-    return;
   } else if (step.type === "messenger") {
     const { message } = step;
     await sendMessengerMessage(message);
@@ -181,7 +196,7 @@ async function processWorkflowStep(step, workflowState, workflowId) {
     await Promise.all(
       paths.map(async (path) => {
         for (const pathStep of path) {
-          await processWorkflowStep(pathStep, workflowState, workflowId);
+          await processWorkflowStep(pathStep, workflowState);
         }
       })
     );
@@ -198,7 +213,7 @@ async function processWorkflowStep(step, workflowState, workflowId) {
   } else if (step.type === "stop") {
     console.log();
     console.log("Stop step encountered, halting workflow");
-    workflowState.stopped = true;
+    workflowState.stopped = true; // Set stopped flag
     return;
   }
 }
@@ -223,7 +238,7 @@ app.post("/webhook/emailEvent", (req, res) => {
     emailEventStates[recipient].clicked = true;
   } else if (event === "opened") {
     emailEventStates[recipient].opened = true;
-    console.log();
+    console.log("");
     console.log("email open ho gya");
     triggerWorkflowForEmailOpened(recipient);
   }
@@ -246,7 +261,6 @@ function triggerWorkflowForEmailOpened(recipient) {
         `Triggering workflow ID: ${workflowId} for email opened by: ${recipient}`
       );
 
-      workflowState.currentStepIndex += 1; // Move to the next step after the conditional
       processNextWorkflowStep(workflowId);
     }
   }
