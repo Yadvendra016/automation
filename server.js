@@ -223,6 +223,7 @@ function sendEmail(emailInfo) {
 }
 
 app.post("/webhook/emailEvent", (req, res) => {
+  console.log("this is body:  ++  " + req.body);
   const recipient = req.body.recipient;
   const event = req.body.event;
 
