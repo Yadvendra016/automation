@@ -4,13 +4,26 @@ const bodyParser = require("body-parser");
 const Mailgun = require("mailgun.js");
 const axios = require("axios");
 const formData = require("form-data");
+const fs = require("fs");
+const path = require("path");
 require("dotenv").config();
+const mongoose = require("mongoose");
+const Contact = require("./models/contact");
 
 const app = express();
 const port = 8080;
 
 app.use(cors());
 app.use(bodyParser.json());
+
+// connect mongodb
+mongoose
+  .connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.log(err));
 
 const mailgun = new Mailgun(formData);
 const mg = mailgun.client({
@@ -63,7 +76,6 @@ app.post("/api/emailWorkflow", async (req, res) => {
     await processNextWorkflowStep(workflowId);
     res.status(200).send({ message: "Workflow submitted successfully" });
   } catch (err) {
-    console.error();
     console.error("Error processing workflow", err);
     res.status(500).send({ message: "Error processing workflow" });
   }
@@ -112,12 +124,35 @@ async function processNextWorkflowStep(workflowId) {
 
 async function processWorkflowStep(step, workflowState) {
   if (step.type === "email") {
-    const { to, subject, message } = step;
+    const { to, subject, message, template } = step;
+    let emailHtml = "";
+
+    if (template) {
+      try {
+        const templatePath = path.join(
+          __dirname,
+          "templates",
+          `${template}.html`
+        );
+        emailHtml = fs.readFileSync(templatePath, "utf-8");
+      } catch (err) {
+        console.error(`Error reading template: ${template}`, err);
+        throw err;
+      }
+    } else {
+      emailHtml = message;
+    }
+
+    if (!emailHtml) {
+      console.error("No email content provided");
+      throw new Error("No email content provided");
+    }
+
     const emailInfo = {
       from: `${workflowState.senderName} <${workflowState.senderEmail}>`,
       to: [to],
       subject: subject,
-      html: message,
+      html: emailHtml,
       "o:tracking": true,
       "o:tracking-opens": true,
     };
@@ -134,7 +169,6 @@ async function processWorkflowStep(step, workflowState) {
       console.log();
       console.log("Email sent successfully");
     } catch (err) {
-      console.error();
       console.error("Error sending email:", err);
       throw err;
     }
@@ -160,7 +194,6 @@ async function processWorkflowStep(step, workflowState) {
       console.log();
       console.log(`Condition result: ${conditionResult}`);
     } catch (error) {
-      console.error();
       console.error(`Error evaluating condition: ${condition}`, error);
       throw error;
     }
@@ -236,10 +269,11 @@ app.post("/webhook/emailEvent", (req, res) => {
 
   if (event === "clicked") {
     emailEventStates[recipient].clicked = true;
+    triggerWorkflowForEmailClicked(recipient);
   } else if (event === "opened") {
     emailEventStates[recipient].opened = true;
     console.log("");
-    console.log("email open ho gya");
+    console.log("Email opened");
     triggerWorkflowForEmailOpened(recipient);
   }
 
@@ -269,6 +303,66 @@ function triggerWorkflowForEmailOpened(recipient) {
     }
   }
 }
+
+function triggerWorkflowForEmailClicked(recipient) {
+  console.log();
+  console.log("Triggering workflow for email clicked");
+
+  for (const workflowId in workflowStates) {
+    const workflowState = workflowStates[workflowId];
+    const step = workflowState.steps[workflowState.currentStepIndex];
+
+    if (
+      step &&
+      step.type === "conditional" &&
+      step.condition.includes(`emailEventStates['${recipient}'].clicked`)
+    ) {
+      console.log();
+      console.log(
+        `Triggering workflow ID: ${workflowId} for email clicked by: ${recipient}`
+      );
+
+      processNextWorkflowStep(workflowId);
+    }
+  }
+}
+
+app.get("/api/templates", (req, res) => {
+  const templatesDir = path.join(__dirname, "templates");
+  fs.readdir(templatesDir, (err, files) => {
+    if (err) {
+      console.error("Error reading templates directory:", err);
+      return res.status(500).send({ message: "Error reading templates" });
+    }
+
+    const templates = files.map((file) => path.parse(file).name);
+    res.status(200).send({ templates });
+  });
+});
+
+// handle form submission
+app.post("/api/createContact", async (req, res) => {
+  const { name, email, phone } = req.body;
+  console.log(
+    `Form is submitted by ${name} with email ${email} and phone number: ${phone}`
+  );
+
+  try {
+    let contact = await Contact.findOne({ email });
+
+    if (!contact) {
+      contact = new Contact({ name, email, phone });
+      await contact.save();
+    }
+
+    res
+      .status(200)
+      .send({ message: "Contact created/updated successfully", contact });
+  } catch (error) {
+    console.error("Error creating/updating contact:", error);
+    res.status(500).send({ message: "Error creating/updating contact" });
+  }
+});
 
 app.listen(port, () => {
   console.log();
