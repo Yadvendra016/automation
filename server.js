@@ -55,11 +55,36 @@ async function sendMessengerMessage(message) {
   }
 }
 
+async function processFindContactStep(step, workflowState) {
+  const { criteria } = step;
+
+  // Build the query based on the criteria
+  const query = {};
+  criteria.forEach(({ field, value }) => {
+    query[field] = value;
+  });
+
+  try {
+    const contact = await Contact.findOne(query);
+
+    if (contact) {
+      console.log(`Contact found: ${JSON.stringify(contact)}`);
+    } else {
+      console.log("Contact not found, stopping workflow");
+      workflowState.stopped = true;
+    }
+  } catch (error) {
+    console.error("Error finding contact:", error);
+    throw error;
+  }
+}
+
 app.post("/api/emailWorkflow", async (req, res) => {
   const { senderEmail, senderName, workflow } = req.body;
   const workflowId = new Date().getTime();
 
   workflowStates[workflowId] = {
+    workflowId,
     senderEmail,
     senderName,
     steps: JSON.parse(workflow),
@@ -248,6 +273,69 @@ async function processWorkflowStep(step, workflowState) {
     console.log("Stop step encountered, halting workflow");
     workflowState.stopped = true; // Set stopped flag
     return;
+  } else if (step.type === "createContact") {
+    const { name, email, phone } = step.data;
+    const { workflowId } = workflowState;
+
+    try {
+      let contact = await Contact.findOne({ email });
+
+      if (!contact) {
+        // Create new contact if it does not exist
+        contact = new Contact({ name, email, phone, workflowId });
+        await contact.save();
+        console.log(`Contact created successfully: ${email}`);
+      } else {
+        // Update existing contact with any changes
+        contact.name = name || contact.name;
+        contact.phone = phone || contact.phone;
+        contact.workflowId = workflowId;
+        await contact.save();
+        console.log(`Contact updated successfully: ${email}`);
+      }
+
+      console.log(`Contact created/updated successfully: ${email}`);
+    } catch (error) {
+      console.error("Error creating/updating contact:", error);
+      throw error;
+    }
+  } else if (step.type === "deleteContact") {
+    const { workflowId } = workflowState;
+
+    try {
+      await Contact.deleteMany({ workflowId });
+      console.log(`Contact deleted successfully: ${workflowId}`);
+      // Ensure workflow is stopped after deletion
+      workflowState.stopped = true;
+    } catch (error) {
+      console.error("Error deleting contact:", error);
+      throw error;
+    }
+  } else if (step.type === "findContact") {
+    await processFindContactStep(step, workflowState);
+  } else if (step.type === "updateContact") {
+    const { findCriteria, updateData } = step.data;
+    const query = {};
+    findCriteria.forEach((field) => {
+      query[field.key] = field.value;
+    });
+
+    try {
+      const contact = await Contact.findOne(query);
+      if (!contact) {
+        console.log("No contact found to update");
+        workflowState.stopped = true;
+      } else {
+        for (const [key, value] of Object.entries(updateData)) {
+          contact[key] = value;
+        }
+        await contact.save();
+        console.log("Contact updated successfully");
+      }
+    } catch (error) {
+      console.error("Error updating contact:", error);
+      throw error;
+    }
   }
 }
 
