@@ -382,30 +382,13 @@ app.post("/webhook/emailEvent", (req, res) => {
 
 function triggerWorkflowForEmailOpened(recipient) {
   console.log();
-  console.log("Triggering workflow for email opened");
+  console.log(`Triggering workflow steps for recipient: ${recipient}`);
 
   for (const workflowId in workflowStates) {
     const workflowState = workflowStates[workflowId];
-    const step = workflowState.steps[workflowState.currentStepIndex];
-
-    if (step && step.type === "conditional") {
-      for (const branch of step.branches) {
-        for (const event of branch.events) {
-          if (
-            event.type === "emailEvent" &&
-            event.action === "open" &&
-            (event.operator === "is" || event.operator === "isNot")
-          ) {
-            console.log();
-            console.log(
-              `Triggering workflow ID: ${workflowId} for email opened by: ${recipient}`
-            );
-            emailEventStates[recipient][event.action] = true;
-            processNextWorkflowStep(workflowId);
-            break;
-          }
-        }
-      }
+    if (workflowState.senderEmail === recipient) {
+      // Restart from the current step
+      processNextWorkflowStep(workflowId);
     }
   }
 }
