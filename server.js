@@ -9,6 +9,7 @@ const path = require("path");
 require("dotenv").config();
 const mongoose = require("mongoose");
 const Contact = require("./models/contact");
+const User = require("./models/user");
 
 const app = express();
 const port = 8080;
@@ -144,7 +145,7 @@ async function processNextWorkflowStep(workflowId) {
   console.log();
   console.log(`Moving to next step in workflow ID: ${workflowId}`);
 
-  processNextWorkflowStep(workflowId);
+  await processNextWorkflowStep(workflowId);
 }
 
 async function processWorkflowStep(step, workflowState) {
@@ -384,6 +385,13 @@ function triggerWorkflowForEmailOpened(recipient) {
   console.log();
   console.log("Triggering workflow for email opened");
 
+  // hii
+  if (!emailEventStates[recipient]) {
+    emailEventStates[recipient] = {};
+  }
+
+  emailEventStates[recipient].opened = true;
+
   for (const workflowId in workflowStates) {
     const workflowState = workflowStates[workflowId];
     const step = workflowState.steps[workflowState.currentStepIndex];
@@ -400,7 +408,7 @@ function triggerWorkflowForEmailOpened(recipient) {
             console.log(
               `Triggering workflow ID: ${workflowId} for email opened by: ${recipient}`
             );
-            emailEventStates[recipient][event.action] = true;
+
             processNextWorkflowStep(workflowId);
             break;
           }
