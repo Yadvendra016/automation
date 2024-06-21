@@ -400,7 +400,7 @@ function triggerWorkflowForEmailOpened(recipient) {
             console.log(
               `Triggering workflow ID: ${workflowId} for email opened by: ${recipient}`
             );
-
+            emailEventStates[recipient][event.action] = true;
             processNextWorkflowStep(workflowId);
             break;
           }
