@@ -223,7 +223,7 @@ async function processWorkflowStep(step, workflowState) {
         console.log(`Evaluating event: ${type} ${operator} ${action}`);
 
         if (type === "emailEvent") {
-          const condition = `emailEventStates['${workflowState.senderEmail}'].${action}`;
+          const condition = `emailEventStates['${event.recipient}'].${action}`;
 
           try {
             const conditionResult = eval(condition);
