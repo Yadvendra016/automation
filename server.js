@@ -238,6 +238,7 @@ async function processWorkflowStep(step, workflowState) {
     console.log("Processing conditional branches");
 
     for (const branch of branches) {
+      console.log(JSON.stringify(branch));
       let conditionMet = true; // Default to true for first branch without conditions
       for (const event of branch.events) {
         if (!evaluateEvent(event)) {
