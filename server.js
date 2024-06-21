@@ -79,6 +79,30 @@ async function processFindContactStep(step, workflowState) {
   }
 }
 
+// condition Event
+function evaluateEvent(event) {
+  const recipient = event.recipient;
+  const eventType = event.type;
+  const operator = event.operator;
+  const action = event.action;
+
+  // Implement your event evaluation logic based on eventType, operator, and action
+  if (eventType === "emailEvent") {
+    if (operator === "is") {
+      if (action === "open") {
+        return (
+          emailEventStates[recipient] && emailEventStates[recipient].opened
+        );
+      }
+      // Add more actions as needed
+    }
+    // Add more operators as needed
+  }
+
+  // Default to false if no matching condition is met
+  return false;
+}
+
 app.post("/api/emailWorkflow", async (req, res) => {
   const { senderEmail, senderName, workflow } = req.body;
   const workflowId = new Date().getTime();
@@ -208,39 +232,34 @@ async function processWorkflowStep(step, workflowState) {
     console.log();
     console.log("Break ended");
   } else if (step.type === "conditional") {
-    const { condition, truePath, falsePath } = step;
-    let conditionResult = false;
+    const { branches } = step;
 
     console.log();
-    console.log(`Evaluating condition: ${condition}`);
+    console.log("Processing conditional branches");
 
-    try {
-      conditionResult = eval(condition);
-      console.log();
-      console.log(`Condition result: ${conditionResult}`);
-    } catch (error) {
-      console.error(`Error evaluating condition: ${condition}`, error);
-      throw error;
-    }
+    for (const branch of branches) {
+      let conditionMet = true; // Default to true for first branch without conditions
+      for (const event of branch.events) {
+        if (!evaluateEvent(event)) {
+          conditionMet = false;
+          break;
+        }
+      }
 
-    if (conditionResult) {
-      console.log();
-      console.log("Condition is true, following truePath");
+      if (conditionMet) {
+        console.log();
+        console.log("Condition met, processing branch");
 
-      workflowState.steps.splice(
-        workflowState.currentStepIndex + 1,
-        0,
-        ...truePath
-      );
-    } else {
-      console.log();
-      console.log("Condition is false, following falsePath");
+        for (const block of branch.blocks) {
+          await processWorkflowStep(block, workflowState);
+          if (workflowState.stopped) {
+            return;
+          }
+        }
 
-      workflowState.steps.splice(
-        workflowState.currentStepIndex + 1,
-        0,
-        ...falsePath
-      );
+        // No need to process further branches if condition met
+        break;
+      }
     }
   } else if (step.type === "messenger") {
     const { message } = step;
