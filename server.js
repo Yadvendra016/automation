@@ -208,39 +208,51 @@ async function processWorkflowStep(step, workflowState) {
     console.log();
     console.log("Break ended");
   } else if (step.type === "conditional") {
-    const { condition, truePath, falsePath } = step;
-    let conditionResult = false;
+    const { branches } = step;
 
     console.log();
-    console.log(`Evaluating condition: ${condition}`);
+    console.log("Processing conditional step with branches:", branches);
 
-    try {
-      conditionResult = eval(condition);
-      console.log();
-      console.log(`Condition result: ${conditionResult}`);
-    } catch (error) {
-      console.error(`Error evaluating condition: ${condition}`, error);
-      throw error;
-    }
+    // Evaluate each branch's condition
+    for (const branch of branches) {
+      let branchConditionMet = true;
 
-    if (conditionResult) {
-      console.log();
-      console.log("Condition is true, following truePath");
+      for (const event of branch.events) {
+        const { type, operator, action } = event;
 
-      workflowState.steps.splice(
-        workflowState.currentStepIndex + 1,
-        0,
-        ...truePath
-      );
-    } else {
-      console.log();
-      console.log("Condition is false, following falsePath");
+        console.log(`Evaluating event: ${type} ${operator} ${action}`);
 
-      workflowState.steps.splice(
-        workflowState.currentStepIndex + 1,
-        0,
-        ...falsePath
-      );
+        if (type === "emailEvent") {
+          const condition = `emailEventStates['${workflowState.senderEmail}'].${action}`;
+
+          try {
+            const conditionResult = eval(condition);
+            if (operator === "is" && !conditionResult) {
+              branchConditionMet = false;
+              break;
+            } else if (operator === "isNot" && conditionResult) {
+              branchConditionMet = false;
+              break;
+            }
+          } catch (error) {
+            console.error(`Error evaluating condition: ${condition}`, error);
+            throw error;
+          }
+        }
+      }
+
+      if (branchConditionMet) {
+        console.log("Branch condition met, processing branch blocks");
+
+        // Insert branch blocks into the workflow steps
+        workflowState.steps.splice(
+          workflowState.currentStepIndex + 1,
+          0,
+          ...branch.blocks
+        );
+
+        break;
+      }
     }
   } else if (step.type === "messenger") {
     const { message } = step;
@@ -369,25 +381,31 @@ app.post("/webhook/emailEvent", (req, res) => {
 });
 
 function triggerWorkflowForEmailOpened(recipient) {
-  console.log("");
-  console.log("in the function triggerWOrkflowopen");
+  console.log();
+  console.log("Triggering workflow for email opened");
+
   for (const workflowId in workflowStates) {
     const workflowState = workflowStates[workflowId];
     const step = workflowState.steps[workflowState.currentStepIndex];
-    console.log("entererd in the triggerWorkflowEmail opened");
-    console.log("");
-    console.log(step);
-    if (
-      step &&
-      step.type === "conditional" &&
-      step.condition.includes(`emailEventStates['${recipient}'].opened`)
-    ) {
-      console.log("");
-      console.log(
-        `Triggering workflow ID: ${workflowId} for email opened by: ${recipient}`
-      );
 
-      processNextWorkflowStep(workflowId);
+    if (step && step.type === "conditional") {
+      for (const branch of step.branches) {
+        for (const event of branch.events) {
+          if (
+            event.type === "emailEvent" &&
+            event.action === "open" &&
+            (event.operator === "is" || event.operator === "isNot")
+          ) {
+            console.log();
+            console.log(
+              `Triggering workflow ID: ${workflowId} for email opened by: ${recipient}`
+            );
+
+            processNextWorkflowStep(workflowId);
+            break;
+          }
+        }
+      }
     }
   }
 }
@@ -400,17 +418,24 @@ function triggerWorkflowForEmailClicked(recipient) {
     const workflowState = workflowStates[workflowId];
     const step = workflowState.steps[workflowState.currentStepIndex];
 
-    if (
-      step &&
-      step.type === "conditional" &&
-      step.condition.includes(`emailEventStates['${recipient}'].clicked`)
-    ) {
-      console.log();
-      console.log(
-        `Triggering workflow ID: ${workflowId} for email clicked by: ${recipient}`
-      );
+    if (step && step.type === "conditional") {
+      for (const branch of step.branches) {
+        for (const event of branch.events) {
+          if (
+            event.type === "emailEvent" &&
+            event.action === "click" &&
+            (event.operator === "is" || event.operator === "isNot")
+          ) {
+            console.log();
+            console.log(
+              `Triggering workflow ID: ${workflowId} for email clicked by: ${recipient}`
+            );
 
-      processNextWorkflowStep(workflowId);
+            processNextWorkflowStep(workflowId);
+            break;
+          }
+        }
+      }
     }
   }
 }
